@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use log::{debug, error, info};
 use my_lib::Module;
@@ -19,9 +19,9 @@ struct CliOptions {
     /// The operation to invoke in the WASM file.
     #[structopt()]
     pub(crate) operation: String,
-    /// The data to pass to the operation
-    #[structopt()]
-    pub(crate) data: String,
+    /// The path to the JSON data to use as input.
+    #[structopt(parse(from_os_str))]
+    pub(crate) json_path: PathBuf,
 }
 
 fn main() {
@@ -45,8 +45,13 @@ fn main() {
 fn run(options: CliOptions) -> anyhow::Result<String> {
     let module = Module::from_file(&options.file_path)?;
     info!("Module loaded");
-    let bytes = rmp_serde::to_vec(&options.data)?;
+    let json = fs::read_to_string(options.json_path)?;
+    let data: serde_json::Value = serde_json::from_str(&json)?;
+    debug!("Data: {:?}", data);
+
+    let bytes = rmp_serde::to_vec(&data)?;
+    debug!("Running {} with payload: {:?}", options.operation, bytes);
     let result = module.run(&options.operation, &bytes)?;
-    let unpacked: String = rmp_serde::from_read_ref(&result)?;
-    Ok(unpacked)
+    let unpacked: serde_json::Value = rmp_serde::from_read_ref(&result)?;
+    Ok(unpacked.to_string())
 }
